@@ -1,3 +1,8 @@
+Forked from https://github.com/instrumenta/openapi2jsonschema as it was abandoned. 
+
+:) 
+
+
 # openapi2jsonschema
 
 A utility to extract [JSON Schema](http://json-schema.org/) from a
