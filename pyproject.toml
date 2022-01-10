@@ -9,7 +9,7 @@ repository = "https://github.com/garethr/openapi2jsonschema"
 keywords = ["openapi", "jsonschema"]
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.6"
 jsonref = "^0.2.0"
 pyyaml = "^5.1"
 click = "^7.0"

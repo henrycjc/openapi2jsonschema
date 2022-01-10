@@ -5,6 +5,9 @@ import yaml
 import urllib
 import os
 import sys
+if sys.version_info < (3, 0):
+    raise Exception("Python 3 only")
+import pathlib
 
 from jsonref import JsonRef  # type: ignore
 import click
@@ -73,18 +76,12 @@ def default(
     Converts a valid OpenAPI specification into a set of JSON Schema files
     """
     info("Downloading schema")
-    if sys.version_info < (3, 0):
-        response = urllib.urlopen(schema)
-    else:
-        if os.path.isfile(schema):
-            schema = "file://" + os.path.realpath(schema)
-        req = urllib.request.Request(schema)
-        response = urllib.request.urlopen(req)
+    data = pathlib.Path(os.path.realpath(schema)).read_bytes().decode("utf-8")
 
     info("Parsing schema")
     # Note that JSON is valid YAML, so we can use the YAML parser whether
     # the schema is stored in JSON or YAML
-    data = yaml.load(response.read(), Loader=yaml.SafeLoader)
+    data = yaml.load(data, Loader=yaml.SafeLoader)
 
     if "swagger" in data:
         version = data["swagger"]
@@ -94,56 +91,10 @@ def default(
     if not os.path.exists(output):
         os.makedirs(output)
 
-    if version < "3":
-        with open("%s/_definitions.json" % output, "w") as definitions_file:
-            info("Generating shared definitions")
-            definitions = data["definitions"]
-            if kubernetes:
-                definitions["io.k8s.apimachinery.pkg.util.intstr.IntOrString"] = {
-                    "oneOf": [{"type": "string"}, {"type": "integer"}]
-                }
-                # Although the kubernetes api does not allow `number`  as valid
-                # Quantity type - almost all kubenetes tooling
-                # recognizes it is valid. For this reason, we extend the API definition to
-                # allow `number` values.
-                definitions["io.k8s.apimachinery.pkg.api.resource.Quantity"] = {
-                    "oneOf": [{"type": "string"}, {"type": "number"}]
-                }
-
-                # For Kubernetes, populate `apiVersion` and `kind` properties from `x-kubernetes-group-version-kind`
-                for type_name in definitions:
-                    type_def = definitions[type_name]
-                    if "x-kubernetes-group-version-kind" in type_def:
-                        for kube_ext in type_def["x-kubernetes-group-version-kind"]:
-                            if expanded and "apiVersion" in type_def["properties"]:
-                                api_version = (
-                                    kube_ext["group"] + "/" +
-                                    kube_ext["version"]
-                                    if kube_ext["group"]
-                                    else kube_ext["version"]
-                                )
-                                append_no_duplicates(
-                                    type_def["properties"]["apiVersion"],
-                                    "enum",
-                                    api_version,
-                                )
-                            if "kind" in type_def["properties"]:
-                                kind = kube_ext["kind"]
-                                append_no_duplicates(
-                                    type_def["properties"]["kind"], "enum", kind
-                                )
-            if strict:
-                definitions = additional_properties(definitions)
-            definitions_file.write(json.dumps(
-                {"definitions": definitions}, indent=2))
-
     types = []
 
     info("Generating individual schemas")
-    if version < "3":
-        components = data["definitions"]
-    else:
-        components = data["components"]["schemas"]
+    components = data["components"]["schemas"]
 
     generated_files = []
 
@@ -235,7 +186,7 @@ def default(
             error("An error occured processing %s: %s" % (kind, e))
 
     if stand_alone:
-        base = "file://%s/%s/" % (os.getcwd(), output)
+        base = (pathlib.Path.cwd() / output / output).as_uri()
         for file_name in generated_files:
             full_path = "%s/%s.json" % (output, file_name)
             specification = json.load(open(full_path))
